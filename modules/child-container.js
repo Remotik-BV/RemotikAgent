@@ -14,6 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Security helper: Validate Windows username format
+function isValidWindowsUsername(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 128) return false;
+    // Windows usernames: domain\user or user@domain or just username
+    // Allow alphanumeric, backslash, at, hyphen, underscore, dot, space
+    // Reject shell metacharacters like: & | ; " ' ` $ < > ( ) { } [ ] ! ^ ~
+    return /^[a-zA-Z0-9@\\_.\- ]+$/.test(name) && !/[&|;"`'$<>(){}[\]!^~]/.test(name);
+}
 
 function childContainer()
 {
@@ -159,8 +167,12 @@ function childContainer()
             }
 
             // Use Task Scheduler, as failover
+            // Validate username to prevent command injection
+            if (!isValidWindowsUsername(options.user)) {
+                throw ('Invalid username format');
+            }
             var parms = '/C SCHTASKS /CREATE /F /TN MeshUserTask /SC ONCE /ST 00:00 ';
-            parms += ('/RU ' + options.user + ' ');
+            parms += ('/RU "' + options.user + '" ');
             parms += ('/TR "\\"' + process.execPath + '\\" -b64exec ' + script + '"');
 
             var child = require('child_process').execFile(process.env['windir'] + '\\system32\\cmd.exe', [parms]);

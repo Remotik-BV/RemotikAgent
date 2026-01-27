@@ -16,6 +16,20 @@ limitations under the License.
 var promise = require('promise');
 var systemd_escape = null;
 
+// Security helper: Validate service name format
+function isValidServiceName(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 128) return false;
+    // Service names: alphanumeric, underscore, hyphen, space, dot
+    // Reject quotes and other special characters that could cause injection
+    return /^[a-zA-Z0-9_\- .]+$/.test(name);
+}
+
+// Security helper: Escape string for JavaScript single-quoted string literal
+function jsEscapeSingleQuote(str) {
+    if (typeof str !== 'string') return '';
+    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 function failureActionToInteger(action)
 {
     var ret;
@@ -2420,7 +2434,10 @@ function serviceManager()
                 // For now, we'll only provide an uninstaller if the binary is the mesh agent binary, so we
                 // won't need to copy the binary to run the uninstall script
                 //
-                var script = Buffer.from("try{require('service-manager').manager.uninstallService('" + options.name + "');}catch(x){}process.exit();").toString('base64');
+                // Validate and escape service name to prevent code injection
+                if (!isValidServiceName(options.name)) { throw ('Invalid service name'); }
+                var safeName = jsEscapeSingleQuote(options.name);
+                var script = Buffer.from("try{require('service-manager').manager.uninstallService('" + safeName + "');}catch(x){}process.exit();").toString('base64');
                 try
                 {
                     reg.WriteKey(reg.HKEY.LocalMachine, 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + options.name, 'DisplayName', options.displayName);

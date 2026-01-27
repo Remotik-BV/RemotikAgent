@@ -14,6 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Security helper: Validate Windows username format
+function isValidWindowsUsername(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 128) return false;
+    // Windows usernames: domain\user or user@domain or just username
+    // Allow alphanumeric, backslash, at, hyphen, underscore, dot, space
+    // Reject shell metacharacters like: & | ; " ' ` $ < > ( ) { } [ ] ! ^ ~
+    return /^[a-zA-Z0-9@\\_.\- ]+$/.test(name) && !/[&|;"`'$<>(){}[\]!^~]/.test(name);
+}
 
 //
 // win-dispatcher is used as a helper function to be able to dispatch
@@ -232,7 +240,11 @@ function dispatch(options)
     //
     console.info1('Using SCHTASKS...');
 
-    var taskoptions = { env: { _target: process.execPath, _args: '-b64exec ' + str, _user: '"' + options.user + '"' } };
+    // Validate username to prevent command injection
+    if (options.user && !isValidWindowsUsername(options.user)) {
+        throw ('Invalid username format');
+    }
+    var taskoptions = { env: { _target: process.execPath, _args: '-b64exec ' + str, _user: options.user ? ('"' + options.user + '"') : '' } };
     for (var c1e in process.env)
     {
         taskoptions.env[c1e] = process.env[c1e];

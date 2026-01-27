@@ -14,8 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Security helper: Validate package/library name
+function isValidPackageName(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 128) return false;
+    // Package names: alphanumeric, dash, underscore, dot, plus
+    return /^[a-zA-Z0-9._+-]+$/.test(name);
+}
+
+// Security helper: Validate binary name
+function isValidBinaryName(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 64) return false;
+    // Binary names: alphanumeric, dash, underscore
+    return /^[a-zA-Z0-9_-]+$/.test(name);
+}
+
 function find(name)
 {
+	// Validate package name to prevent command injection
+	if (!isValidPackageName(name)) { return []; }
+
 	switch(process.platform)
 	{
 		case 'freebsd':
@@ -30,6 +47,8 @@ function find(name)
 			{
 				if(!res[i].startsWith(name + '.so')) { continue; }
 				var v = {name: res[i]};
+				// Validate library name from output before using in command
+				if (!isValidPackageName(v.name)) { continue; }
 				child = require('child_process').execFile('/bin/sh', ['sh']);
 				child.stdout.str = '';
 				child.stdout.on('data', function (c) { this.str += c.toString(); });
@@ -49,6 +68,8 @@ function find(name)
 function hasBinary(bin)
 {
     if (process.platform != 'linux' && process.platform != 'freebsd') { return (false); }
+    // Validate binary name to prevent command injection
+    if (!isValidBinaryName(bin)) { return (false); }
     var child = require('child_process').execFile('/bin/sh', ['sh']);
     child.stdout.str = '';
     child.stdout.on('data', function (c) { this.str += c.toString(); });
@@ -61,6 +82,8 @@ function hasBinary(bin)
 function findBinary(bin)
 {
     if (process.platform != 'linux' && process.platform != 'freebsd') { return (null); }
+    // Validate binary name to prevent command injection
+    if (!isValidBinaryName(bin)) { return (null); }
     var child = require('child_process').execFile('/bin/sh', ['sh']);
     child.stdout.str = '';
     child.stdout.on('data', function (c) { this.str += c.toString(); });

@@ -16,7 +16,12 @@ limitations under the License.
 
 try { Object.defineProperty(Array.prototype, "peek", { value: function () { return (this.length > 0 ? this[this.length - 1] : undefined); } }); } catch (e) { }
 
-
+// Security helper: Validate dbus service name format
+function isValidDbusServiceName(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 255) return false;
+    // DBus service names: letters, digits, dots, hyphens, underscores
+    return /^[a-zA-Z0-9._-]+$/.test(name);
+}
 
 function dbus(address, uid, env)
 {
@@ -153,6 +158,9 @@ function dbus(address, uid, env)
 module.exports = dbus;
 module.exports.hasService = function hasService(name)
 {
+    // Validate service name to prevent command injection
+    if (!isValidDbusServiceName(name)) { return false; }
+
     var child = require('child_process').execFile('/bin/sh', ['sh']);
     child.stderr.str = ''; child.stderr.on('data', function (c) { this.str += c.toString(); });
     child.stdout.str = ''; child.stdout.on('data', function (c) { this.str += c.toString(); });
@@ -176,6 +184,8 @@ module.exports.getServices = function getServices()
         }
     }
 
+    // Validate grep pattern to prevent command injection
+    if (grep && !isValidDbusServiceName(grep)) { grep = null; }
     if (grep) { grep = ' | grep "' + grep + '"'; } else { grep = ''; }
     var child = require('child_process').execFile('/bin/sh', ['sh'], options);
     child.stderr.str = ''; child.stderr.on('data', function (c) { this.str += c.toString(); });
