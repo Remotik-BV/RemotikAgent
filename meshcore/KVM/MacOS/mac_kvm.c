@@ -943,9 +943,26 @@ MPAuthorizationStatus _fullDiskAuthorizationStatus() {
         userHomeFolderPath = pw->pw_dir;
     }
 
+    // Build paths safely with proper buffer sizes and NULL checks
+    size_t homeLen = strlen(userHomeFolderPath);
+    const char *suffix1 = "/Library/Safari/CloudTabs.db";
+    const char *suffix2 = "/Library/Safari/Bookmarks.plist";
+
+    char *path1 = malloc(homeLen + strlen(suffix1) + 1);
+    char *path2 = malloc(homeLen + strlen(suffix2) + 1);
+
+    if (path1 == NULL || path2 == NULL) {
+        free(path1);  // free(NULL) is safe
+        free(path2);
+        return MPAuthorizationStatusNotDetermined;
+    }
+
+    snprintf(path1, homeLen + strlen(suffix1) + 1, "%s%s", userHomeFolderPath, suffix1);
+    snprintf(path2, homeLen + strlen(suffix2) + 1, "%s%s", userHomeFolderPath, suffix2);
+
     const char *testFiles[] = {
-        strcat(strcpy(malloc(strlen(userHomeFolderPath) + 30), userHomeFolderPath), "/Library/Safari/CloudTabs.db"),
-        strcat(strcpy(malloc(strlen(userHomeFolderPath) + 30), userHomeFolderPath), "/Library/Safari/Bookmarks.plist"),
+        path1,
+        path2,
         "/Library/Application Support/com.apple.TCC/TCC.db",
         "/Library/Preferences/com.apple.TimeMachine.plist",
     };
@@ -961,6 +978,10 @@ MPAuthorizationStatus _fullDiskAuthorizationStatus() {
             resultStatus = MPAuthorizationStatusDenied;
         }
     }
+
+    // Free allocated memory
+    free(path1);
+    free(path2);
 
     return resultStatus;
 }
