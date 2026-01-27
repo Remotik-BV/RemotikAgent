@@ -46,6 +46,9 @@ limitations under the License.
 #ifdef _POSIX
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
 #endif
 
 #ifdef _OPENBSD
@@ -373,6 +376,114 @@ void MeshServer_SendJSON(MeshAgentHostContainer* agent, ILibWebClient_StateObjec
 
 #if defined(_LINKVM) && defined(_POSIX) && !defined(__APPLE__)
 extern void ILibProcessPipe_FreePipe(ILibProcessPipe_Pipe pipeObject);
+#endif
+
+#ifdef _POSIX
+// Security helper: Validate service name contains only safe characters
+// Returns 1 if valid, 0 if invalid
+static int is_valid_service_name(const char *name)
+{
+	if (name == NULL || name[0] == '\0') return 0;
+
+	// Only allow alphanumeric, dash, underscore, and dot
+	for (const char *p = name; *p != '\0'; p++)
+	{
+		char c = *p;
+		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		      (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.'))
+		{
+			return 0;
+		}
+	}
+	return 1;
+}
+
+// Security helper: Copy file safely without using system()
+// Returns 0 on success, -1 on failure
+static int safe_copy_file(const char *src, const char *dst)
+{
+	int src_fd = -1, dst_fd = -1;
+	char buffer[8192];
+	ssize_t bytes_read, bytes_written;
+	struct stat src_stat;
+	int result = -1;
+
+	if (src == NULL || dst == NULL) return -1;
+
+	// Get source file permissions
+	if (stat(src, &src_stat) != 0) return -1;
+
+	// Open source file
+	src_fd = open(src, O_RDONLY);
+	if (src_fd < 0) return -1;
+
+	// Open destination file with same permissions as source
+	dst_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, src_stat.st_mode);
+	if (dst_fd < 0)
+	{
+		close(src_fd);
+		return -1;
+	}
+
+	// Copy data
+	while ((bytes_read = read(src_fd, buffer, sizeof(buffer))) > 0)
+	{
+		char *write_ptr = buffer;
+		ssize_t remaining = bytes_read;
+
+		while (remaining > 0)
+		{
+			bytes_written = write(dst_fd, write_ptr, remaining);
+			if (bytes_written < 0)
+			{
+				if (errno == EINTR) continue;
+				goto cleanup;
+			}
+			remaining -= bytes_written;
+			write_ptr += bytes_written;
+		}
+	}
+
+	if (bytes_read == 0) result = 0; // Success - reached EOF
+
+cleanup:
+	if (src_fd >= 0) close(src_fd);
+	if (dst_fd >= 0)
+	{
+		if (fsync(dst_fd) != 0 && result == 0) result = -1;
+		close(dst_fd);
+	}
+	return result;
+}
+
+// Security helper: Execute service command safely using fork/execve
+// Returns exit status of command, or -1 on error
+static int safe_exec_service_cmd(const char *cmd_path, char *const argv[])
+{
+	pid_t pid;
+	int status;
+
+	if (cmd_path == NULL || argv == NULL) return -1;
+
+	pid = fork();
+	if (pid < 0)
+	{
+		return -1; // Fork failed
+	}
+	else if (pid == 0)
+	{
+		// Child process
+		execve(cmd_path, argv, environ);
+		_exit(127); // execve failed
+	}
+	else
+	{
+		// Parent process
+		if (waitpid(pid, &status, 0) < 0) return -1;
+		if (WIFEXITED(status)) return WEXITSTATUS(status);
+		return -1;
+	}
+}
 #endif
 
 void MeshAgent_sendConsoleText(duk_context *ctx, char *format, ...)
@@ -6242,19 +6353,37 @@ int MeshAgent_Start(MeshAgentHostContainer *agentHost, int paramLen, char **para
 				stat(agentHost->exePath, &results); // This the mode of the current executable
 				chmod(updateFilePath, results.st_mode); // Set the new executable to the same mode as the current one.
 
-				sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "mv \"%s\" \"%s\"", updateFilePath, agentHost->exePath); // Move the update over our own executable
-				if (system(ILibScratchPad)) {}
+				// Use rename() instead of system("mv") to avoid command injection
+				if (rename(updateFilePath, agentHost->exePath) != 0)
+				{
+					// If rename fails (e.g., cross-device), fall back to safe copy
+					if (safe_copy_file(updateFilePath, agentHost->exePath) == 0)
+					{
+						remove(updateFilePath);
+					}
+				}
 				switch (agentHost->platformType)
 				{
 				case MeshAgent_Posix_PlatformTypes_BSD:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... [restarting service]"); }
-					sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "service %s onerestart", agentHost->meshServiceName);	// Restart the service
-					ignore_result(system(ILibScratchPad));
+					// Use fork/execve instead of system() to avoid command injection
+					if (is_valid_service_name(agentHost->meshServiceName))
+					{
+						char *args[] = { "service", agentHost->meshServiceName, "onerestart", NULL };
+						ignore_result(safe_exec_service_cmd("/usr/sbin/service", args));
+					}
 					break;
 				case MeshAgent_Posix_PlatformTypes_LAUNCHD:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... [kickstarting service]"); }
-					sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "launchctl kickstart -k system/%s", agentHost->meshServiceName);	// Restart the service
-					ignore_result(system(ILibScratchPad));
+					// Use fork/execve instead of system() to avoid command injection
+					if (is_valid_service_name(agentHost->meshServiceName))
+					{
+						// Build the service identifier (system/servicename)
+						char serviceId[256];
+						snprintf(serviceId, sizeof(serviceId), "system/%s", agentHost->meshServiceName);
+						char *args[] = { "launchctl", "kickstart", "-k", serviceId, NULL };
+						ignore_result(safe_exec_service_cmd("/bin/launchctl", args));
+					}
 					break;
 				case MeshAgent_Posix_PlatformTypes_SYSTEMD:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... [SYSTEMD should auto-restart]"); }
@@ -6266,13 +6395,21 @@ int MeshAgent_Start(MeshAgentHostContainer *agentHost, int paramLen, char **para
 					break;
 				case MeshAgent_Posix_PlatformTypes_INITD:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... Calling Service restart (INITD)"); }
-					sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "service %s restart", agentHost->meshServiceName);	// Restart the service
-					ignore_result(MeshAgent_System(ILibScratchPad));
+					// Use fork/execve instead of system() to avoid command injection
+					if (is_valid_service_name(agentHost->meshServiceName))
+					{
+						char *args[] = { "service", agentHost->meshServiceName, "restart", NULL };
+						ignore_result(safe_exec_service_cmd("/usr/sbin/service", args));
+					}
 					break;
 				case MeshAgent_Posix_PlatformTypes_INIT_UPSTART:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... Calling initctl restart (UPSTART)"); }
-					sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "initctl restart %s", agentHost->meshServiceName);	// Restart the service
-					ignore_result(MeshAgent_System(ILibScratchPad));
+					// Use fork/execve instead of system() to avoid command injection
+					if (is_valid_service_name(agentHost->meshServiceName))
+					{
+						char *args[] = { "initctl", "restart", agentHost->meshServiceName, NULL };
+						ignore_result(safe_exec_service_cmd("/sbin/initctl", args));
+					}
 					break;
 				default:
 					break;
@@ -6293,8 +6430,12 @@ int MeshAgent_Start(MeshAgentHostContainer *agentHost, int paramLen, char **para
 				chmod(updateFilePath, results.st_mode); // Set the new executable to the same mode as the current one.
 
 				remove(agentHost->exePath);
-				sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "cp \"%s\" \"%s\"", updateFilePath, agentHost->exePath);
-				if (system(ILibScratchPad)) {}
+				// Use safe_copy_file() instead of system("cp") to avoid command injection
+				if (safe_copy_file(updateFilePath, agentHost->exePath) != 0)
+				{
+					// Copy failed, cannot continue with update
+					_exit(1);
+				}
 				ignore_result(write(STDOUT_FILENO, "SelfUpdate -> Restarting Agent...\n", 34));
 
 				execv(agentHost->exePath, agentHost->execparams);
@@ -6377,28 +6518,49 @@ void MeshAgent_PerformSelfUpdate(char* selfpath, char* exepath, int argc, char *
 // Perform self-update (Linux version)
 void MeshAgent_PerformSelfUpdate(char* selfpath, char* exepath, int argc, char **argv)
 {
-	int i, ptr = 0;
+	pid_t pid;
+	struct stat src_stat;
 
 	// First, we wait a little to give time for the calling process to exit
 	sleep(5);
 
-	// Attempt to copy our own exe over 
+	// Attempt to copy our own exe over using safe_copy_file() instead of system("cp")
 	remove(exepath);
-	sprintf_s(ILibScratchPad2, 6000, "cp \"%s\" \"%s\"", selfpath, exepath);
-	while (system(ILibScratchPad2) != 0)
+	while (safe_copy_file(selfpath, exepath) != 0)
 	{
 		sleep(5);
 		remove(exepath);
 	}
 
-	// Built the argument list
-	ILibScratchPad[0] = 0;
-	for (i = 2; i < argc && ptr >= 0; i++) ptr += sprintf_s(ILibScratchPad + ptr, 4096 - ptr, " %s", argv[i]);
-	sprintf_s(ILibScratchPad2, 60000, "%s%s &", exepath, ILibScratchPad);
+	// Get permissions from source and apply to destination
+	if (stat(selfpath, &src_stat) == 0)
+	{
+		chmod(exepath, src_stat.st_mode);
+	}
 
-	// Now run the updated process
-	i = system(ILibScratchPad2);
-	UNREFERENCED_PARAMETER(i);
+	// Build the argument list for execv
+	// argv[0] = selfpath (update binary), argv[1] = exepath (original path)
+	// We want to run: exepath argv[2] argv[3] ...
+	char **new_argv = (char **)malloc((argc + 1) * sizeof(char *));
+	if (new_argv == NULL) return;
+
+	new_argv[0] = exepath;
+	for (int i = 2; i < argc; i++)
+	{
+		new_argv[i - 1] = argv[i];
+	}
+	new_argv[argc > 1 ? argc - 1 : 1] = NULL;
+
+	// Fork and exec the updated process instead of using system() with "&"
+	pid = fork();
+	if (pid == 0)
+	{
+		// Child process - run the updated executable
+		execv(exepath, new_argv);
+		_exit(127); // execv failed
+	}
+	// Parent exits, leaving child running (detached)
+	free(new_argv);
 }
 #endif
 
