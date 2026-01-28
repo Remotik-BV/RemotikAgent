@@ -262,7 +262,7 @@ require('MeshAgent').AddCommandHandler(function (data)
                                                         // Delete, possibly recursive delete
                                                         for (var i in cmd.delfiles)
                                                         {
-                                                            try { deleteFolderRecursive(path.join(cmd.path, cmd.delfiles[i]), cmd.rec); } catch (e) { }
+                                                            try { deleteFolderRecursive(path.join(cmd.path, cmd.delfiles[i]), cmd.rec); } catch (e) { console.log('rm error:', e.message); }
                                                         }
                                                         break;
                                                     }
@@ -287,7 +287,7 @@ require('MeshAgent').AddCommandHandler(function (data)
                                                         // Copy a bunch of files from scpath to dspath
                                                         for (var i in cmd.names) {
                                                             var sc = path.join(cmd.scpath, cmd.names[i]), ds = path.join(cmd.dspath, cmd.names[i]);
-                                                            if (sc != ds) { try { fs.copyFileSync(sc, ds); } catch (e) { } }
+                                                            if (sc != ds) { try { fs.copyFileSync(sc, ds); } catch (e) { console.log('copy error:', e.message); } }
                                                         }
                                                         break;
                                                     }
@@ -295,7 +295,7 @@ require('MeshAgent').AddCommandHandler(function (data)
                                                         // Move a bunch of files from scpath to dspath
                                                         for (var i in cmd.names) {
                                                             var sc = path.join(cmd.scpath, cmd.names[i]), ds = path.join(cmd.dspath, cmd.names[i]);
-                                                            if (sc != ds) { try { fs.copyFileSync(sc, ds); fs.unlinkSync(sc); } catch (e) { } }
+                                                            if (sc != ds) { try { fs.copyFileSync(sc, ds); fs.unlinkSync(sc); } catch (e) { console.log('move error:', e.message); } }
                                                         }
                                                         break;
                                                     }

@@ -98,6 +98,11 @@ limitations under the License.
 
     var exe = require('fs').readFileSync(process.execPath);
     var w = require('fs').createWriteStream('interactive', { flags: 'wb' });
+    w.on('error', function(err) {
+        console.error('Write stream error:', err.message);
+        try { w.destroy(); } catch (e) { }
+        process.exit(1);
+    });
     w.write(exe, function ()
     {
         // Write the padding to QuadWord Align the embedded JS
@@ -116,12 +121,13 @@ limitations under the License.
             // Write the magic GUID
             this.write(Buffer.from(exeJavaScriptGuid, 'hex'), function ()
             { // GUID for JavaScript
-                this.end();
-                console.log("Interactive Setup Utility successfully created.");
+                this.end(function() {
+                    console.log("Interactive Setup Utility successfully created.");
+                    process.exit();
+                });
             });
         });
     });
-    process.exit();
 
 /*****/
 

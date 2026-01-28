@@ -14,6 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Security helper: Validate Windows username format
+function isValidWindowsUsername(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 128) return false;
+    // Windows usernames: domain\user or user@domain or just username
+    // Allow alphanumeric, backslash, at, hyphen, underscore, dot, space
+    // Reject shell metacharacters like: & | ; " ' ` $ < > ( ) { } [ ] ! ^ ~
+    return /^[a-zA-Z0-9@\\_.\- ]+$/.test(name) && !/[&|;"`'$<>(){}[\]!^~]/.test(name);
+}
 
 function childContainer()
 {
@@ -114,7 +122,8 @@ function childContainer()
             {
                 var cLen;
                 if (c.length < 4 || (cLen = c.readUInt32LE(0)) > c.length) { this.unshift(c); return; }
-                var cmd = JSON.parse(c.slice(4, cLen).toString());
+                var cmd;
+                try { cmd = JSON.parse(c.slice(4, cLen).toString()); } catch (e) { return; }
                 switch (cmd.command)
                 {
                     case 'message':
@@ -159,14 +168,19 @@ function childContainer()
             }
 
             // Use Task Scheduler, as failover
+            // Validate username to prevent command injection
+            if (!isValidWindowsUsername(options.user)) {
+                throw ('Invalid username format');
+            }
             var parms = '/C SCHTASKS /CREATE /F /TN MeshUserTask /SC ONCE /ST 00:00 ';
-            parms += ('/RU ' + options.user + ' ');
+            parms += ('/RU "' + options.user + '" ');
             parms += ('/TR "\\"' + process.execPath + '\\" -b64exec ' + script + '"');
 
             var child = require('child_process').execFile(process.env['windir'] + '\\system32\\cmd.exe', [parms]);
             child.stderr.on('data', function (c) { });
             child.stdout.on('data', function (c) { });
             child.waitExit();
+            try { child.kill(); } catch (e) { }
 
             child = require('child_process').execFile(process.env['windir'] + '\\system32\\cmd.exe', ['cmd']);
             child.stderr.on('data', function (c) { });
@@ -174,6 +188,7 @@ function childContainer()
             child.stdin.write('SCHTASKS /RUN /TN MeshUserTask\r\n');
             child.stdin.write('SCHTASKS /DELETE /F /TN MeshUserTask\r\nexit\r\n');
             child.waitExit();
+            try { child.kill(); } catch (e) { }
         }
         else
         {
@@ -246,7 +261,8 @@ function childContainer()
                 var cLen;
                 if (c.length < 4 || (cLen = c.readUInt32LE(0)) > c.length) { this.unshift(c); return; }
 
-                var cmd = JSON.parse(c.slice(4, cLen).toString());
+                var cmd;
+                try { cmd = JSON.parse(c.slice(4, cLen).toString()); } catch (e) { return; }
                 switch (cmd.command)
                 {
                     case 'addModule':

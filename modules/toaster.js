@@ -22,6 +22,40 @@ limitations under the License.
 
 var promise = require('promise');
 
+// Security helper: Validate command/app name contains only safe characters
+function isValidCommandName(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 64) return false;
+    return /^[a-zA-Z0-9_-]+$/.test(name);
+}
+
+// Security helper: Escape string for use in single-quoted shell argument
+// This prevents injection in constructs like: echo 'user input here'
+function shellEscapeSingleQuote(str) {
+    if (typeof str !== 'string') return '';
+    // Replace single quotes with '\'' (end quote, escaped quote, start quote)
+    return str.replace(/'/g, "'\\''");
+}
+
+// Security helper: Validate username (alphanumeric, underscore, hyphen)
+function isValidUsername(name) {
+    if (typeof name !== 'string' || name.length === 0 || name.length > 64) return false;
+    return /^[a-zA-Z0-9_-]+$/.test(name);
+}
+
+// Security helper: Validate display string (e.g., ":0", ":1.0")
+function isValidDisplay(display) {
+    if (typeof display !== 'string' || display.length === 0 || display.length > 32) return false;
+    return /^:[0-9]+(\.[0-9]+)?$/.test(display);
+}
+
+// Security helper: Validate XDG_RUNTIME_DIR path
+function isValidXdgPath(path) {
+    if (typeof path !== 'string' || path.length > 256) return false;
+    if (path === '') return true; // Empty is allowed
+    // Only allow safe path characters, no shell metacharacters
+    return /^[a-zA-Z0-9_\-\/\.]+$/.test(path);
+}
+
 if (process.platform == 'linux' || process.platform == 'darwin' || process.platform == 'freebsd')
 {
     //
@@ -29,21 +63,28 @@ if (process.platform == 'linux' || process.platform == 'darwin' || process.platf
     //
     function findPath(app)
     {
+        // Validate app name to prevent command injection
+        if (!isValidCommandName(app)) { return null; }
+
         var child = require('child_process').execFile('/bin/sh', ['sh']);
         child.stdout.str = '';
         child.stdout.on('data', function (chunk) { this.str += chunk.toString(); });
-        if (process.platform == 'linux' || process.platform == 'freebsd')
-        {
-            child.stdin.write("whereis " + app + " | awk '{ print $2 }'\nexit\n");
+        try {
+            if (process.platform == 'linux' || process.platform == 'freebsd')
+            {
+                child.stdin.write("whereis " + app + " | awk '{ print $2 }'\nexit\n");
+            }
+            else
+            {
+                child.stdin.write("whereis " + app + "\nexit\n");
+            }
+            child.waitExit();
+            child.stdout.str = child.stdout.str.trim();
+            if (process.platform == 'freebsd' && child.stdout.str == '' && require('fs').existsSync('/usr/local/bin/' + app)) { return ('/usr/local/bin/' + app); }
+            return (child.stdout.str == '' ? null : child.stdout.str);
+        } finally {
+            try { child.kill(); } catch (e) { }
         }
-        else
-        {
-            child.stdin.write("whereis " + app + "\nexit\n");
-        }
-        child.waitExit();
-        child.stdout.str = child.stdout.str.trim();
-        if (process.platform == 'freebsd' && child.stdout.str == '' && require('fs').existsSync('/usr/local/bin/' + app)) { return ('/usr/local/bin/' + app); }
-        return (child.stdout.str == '' ? null : child.stdout.str);
     }
 }
 
@@ -177,8 +218,16 @@ function Toaster()
                                 {
                                     // We're root, so we must run in correct context
                                     var xdg = require('user-sessions').findEnv(retVal.consoleUid, 'XDG_RUNTIME_DIR'); if (xdg == null) { xdg = ''; }
+                                    // Validate inputs to prevent command injection
+                                    if (!isValidUsername(retVal.username) || !isValidDisplay(retVal.xinfo.display) || !isValidXdgPath(xdg)) {
+                                        retVal._rej('Invalid parameters for notify-send');
+                                        return retVal;
+                                    }
+                                    // Escape title and caption for single-quoted shell strings
+                                    var safeTitle = shellEscapeSingleQuote(retVal.title);
+                                    var safeCaption = shellEscapeSingleQuote(retVal.caption);
                                     retVal.child = require('child_process').execFile('/bin/sh', ['sh']);
-                                    retVal.child.stdin.write('su - ' + retVal.username + ' -c "export DISPLAY=' + retVal.xinfo.display + '; export XDG_RUNTIME_DIR=' + xdg + '; notify-send \'' + retVal.title + '\' \'' + retVal.caption + '\'"\nexit\n');
+                                    retVal.child.stdin.write('su - ' + retVal.username + ' -c "export DISPLAY=' + retVal.xinfo.display + '; export XDG_RUNTIME_DIR=' + xdg + '; notify-send \'' + safeTitle + '\' \'' + safeCaption + '\'"\nexit\n');
                                 }
                                 else
                                 {
@@ -254,8 +303,16 @@ function Toaster()
                                 {
                                     // We're root, so we must run in correct context
                                     var xdg = require('user-sessions').findEnv(retVal.consoleUid, 'XDG_RUNTIME_DIR'); if (xdg == null) { xdg = ''; }
+                                    // Validate inputs to prevent command injection
+                                    if (!isValidUsername(retVal.username) || !isValidDisplay(retVal.xinfo.display) || !isValidXdgPath(xdg)) {
+                                        retVal._rej('Invalid parameters for notify-send');
+                                        return retVal;
+                                    }
+                                    // Escape title and caption for single-quoted shell strings
+                                    var safeTitle = shellEscapeSingleQuote(retVal.title);
+                                    var safeCaption = shellEscapeSingleQuote(retVal.caption);
                                     retVal.child = require('child_process').execFile('/bin/sh', ['sh']);
-                                    retVal.child.stdin.write('su - ' + retVal.username + ' -c "export DISPLAY=' + retVal.xinfo.display + '; export XDG_RUNTIME_DIR=' + xdg + '; notify-send \'' + retVal.title + '\' \'' + retVal.caption + '\'"\nexit\n');
+                                    retVal.child.stdin.write('su - ' + retVal.username + ' -c "export DISPLAY=' + retVal.xinfo.display + '; export XDG_RUNTIME_DIR=' + xdg + '; notify-send \'' + safeTitle + '\' \'' + safeCaption + '\'"\nexit\n');
                                 }
                                 else
                                 {
@@ -333,8 +390,18 @@ module.exports = new Toaster();
 //
 if (process.platform == 'linux' && !require('linux-dbus').hasService)
 {
+    // Security helper: Validate dbus service name format
+    function isValidDbusServiceName(name) {
+        if (typeof name !== 'string' || name.length === 0 || name.length > 255) return false;
+        // DBus service names: letters, digits, dots, hyphens, underscores
+        return /^[a-zA-Z0-9._-]+$/.test(name);
+    }
+
     require('linux-dbus').hasService = function hasService(name)
     {
+        // Validate service name to prevent command injection
+        if (!isValidDbusServiceName(name)) { return false; }
+
         var child = require('child_process').execFile('/bin/sh', ['sh']);
         child.stderr.str = ''; child.stderr.on('data', function (c) { this.str += c.toString(); });
         child.stdout.str = ''; child.stdout.on('data', function (c) { this.str += c.toString(); });

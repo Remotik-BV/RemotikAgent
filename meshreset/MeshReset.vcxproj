@@ -196,6 +196,10 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Qspectre %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>Iphlpapi.lib;DbgHelp.lib;Setupapi.lib;ws2_32.lib;Psapi.lib;Crypt32.lib;Wintrust.lib;Version.lib;Wtsapi32.lib;bcrypt.lib;%(AdditionalDependencies);Gdiplus.lib</AdditionalDependencies>
@@ -205,6 +209,10 @@
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <TargetMachine>MachineX86</TargetMachine>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <SetChecksum>true</SetChecksum>
+      <AdditionalOptions>/HIGHENTROPYVA %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
       <Command>signtool.exe sign /sha1 fd5940d8fd585545614fea6da455f25d224b00c9 /d "MeshConsole" /du "http://opentools.homeip.net" "$(TargetPath)"</Command>
@@ -225,6 +233,10 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Qspectre %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>ws2_32.lib;DbgHelp.lib;Setupapi.lib;Psapi.lib;Iphlpapi.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -233,6 +245,10 @@
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <TargetMachine>MachineX64</TargetMachine>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <SetChecksum>true</SetChecksum>
+      <AdditionalOptions>/HIGHENTROPYVA %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

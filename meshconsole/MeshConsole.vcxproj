@@ -194,19 +194,19 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
+    <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_NoOpenSSL|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
+    <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Library_Release_NoOpenSSL|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
+    <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -230,19 +230,19 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
+    <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release_NoOpenSSL|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
+    <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Library_Release_NoOpenSSL|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
-    <UseDebugLibraries>true</UseDebugLibraries>
+    <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -426,15 +426,22 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>MESH_AGENTID=1;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;_CONSOLE;WIN32;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;ILibChain_WATCHDOG_TIMEOUT=600000;DUK_USE_DEBUGGER_SUPPORT;DUK_USE_INTERRUPT_COUNTER;DUK_USE_DEBUGGER_INSPECT;DUK_USE_DEBUGGER_PAUSE_UNCAUGHT;DUK_USE_DEBUGGER_DUMPHEAP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MESH_AGENTID=1;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;_CONSOLE;WIN32;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;ILibChain_WATCHDOG_TIMEOUT=600000;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\openssl\include;..\</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Qspectre %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>SetupAPI.lib;Crypt32.lib;Ncrypt.lib;DbgHelp.lib;Gdiplus.lib;Iphlpapi.lib;ws2_32.lib;..\openssl\libstatic\libcrypto32MT.lib;..\openssl\libstatic\libssl32MT.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/HIGHENTROPYVA /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <SetChecksum>true</SetChecksum>
     </Link>
     <PreBuildEvent>
       <Command>
@@ -453,15 +460,22 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>MESH_AGENTID=1;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;WIN32;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;MICROSTACK_NOTLS;DUK_USE_DEBUGGER_SUPPORT;DUK_USE_INTERRUPT_COUNTER;DUK_USE_DEBUGGER_INSPECT;DUK_USE_DEBUGGER_PAUSE_UNCAUGHT;DUK_USE_DEBUGGER_DUMPHEAP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MESH_AGENTID=1;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;WIN32;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;MICROSTACK_NOTLS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Qspectre %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>SetupAPI.lib;Bcrypt.lib;Crypt32.lib;DbgHelp.lib;Gdiplus.lib;Iphlpapi.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/HIGHENTROPYVA /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <SetChecksum>true</SetChecksum>
     </Link>
     <PreBuildEvent>
       <Command>
@@ -480,15 +494,22 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>MESH_AGENTID=1;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;WIN32;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;MICROSTACK_NOTLS;MeshLibInterface;DUK_USE_DEBUGGER_SUPPORT;DUK_USE_INTERRUPT_COUNTER;DUK_USE_DEBUGGER_INSPECT;DUK_USE_DEBUGGER_PAUSE_UNCAUGHT;DUK_USE_DEBUGGER_DUMPHEAP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MESH_AGENTID=1;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;WIN32;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;MICROSTACK_NOTLS;MeshLibInterface;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Qspectre %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>SetupAPI.lib;Bcrypt.lib;Crypt32.lib;DbgHelp.lib;Gdiplus.lib;Iphlpapi.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/HIGHENTROPYVA /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <SetChecksum>true</SetChecksum>
     </Link>
     <PreBuildEvent>
       <Command>
@@ -579,15 +600,22 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>MESH_AGENTID=2;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;_CONSOLE;WIN32;WIN64;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;ILibChain_WATCHDOG_TIMEOUT=600000;DUK_USE_DEBUGGER_SUPPORT;DUK_USE_INTERRUPT_COUNTER;DUK_USE_DEBUGGER_INSPECT;DUK_USE_DEBUGGER_PAUSE_UNCAUGHT;DUK_USE_DEBUGGER_DUMPHEAP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MESH_AGENTID=2;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;_CONSOLE;WIN32;WIN64;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;ILibChain_WATCHDOG_TIMEOUT=600000;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\openssl\include;..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Qspectre %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>SetupAPI.lib;DbgHelp.lib;Gdiplus.lib;Iphlpapi.lib;Crypt32.lib;Ncrypt.lib;ws2_32.lib;..\openssl\libstatic\libcrypto64MT.lib;..\openssl\libstatic\libssl64MT.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
-      <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/HIGHENTROPYVA /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <SetChecksum>true</SetChecksum>
     </Link>
     <PreBuildEvent>
       <Command>
@@ -606,15 +634,22 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>MESH_AGENTID=2;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;WIN32;WIN64;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;MICROSTACK_NOTLS;DUK_USE_DEBUGGER_SUPPORT;DUK_USE_INTERRUPT_COUNTER;DUK_USE_DEBUGGER_INSPECT;DUK_USE_DEBUGGER_PAUSE_UNCAUGHT;DUK_USE_DEBUGGER_DUMPHEAP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MESH_AGENTID=2;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;WIN32;WIN64;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;MICROSTACK_NOTLS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\openssl\include;..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Qspectre %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>SetupAPI.lib;DbgHelp.lib;Gdiplus.lib;Iphlpapi.lib;Bcrypt.lib;Crypt32.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
-      <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/HIGHENTROPYVA /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <SetChecksum>true</SetChecksum>
     </Link>
     <PreBuildEvent>
       <Command>
@@ -633,15 +668,22 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>MESH_AGENTID=2;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;WIN32;WIN64;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;MICROSTACK_NOTLS;MeshLibInterface;DUK_USE_DEBUGGER_SUPPORT;DUK_USE_INTERRUPT_COUNTER;DUK_USE_DEBUGGER_INSPECT;DUK_USE_DEBUGGER_PAUSE_UNCAUGHT;DUK_USE_DEBUGGER_DUMPHEAP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MESH_AGENTID=2;DUK_USE_DATE_NOW_WINDOWS;NOLMSCOMMANDER;MICROSTACK_PROXY;_LINKVM;WIN32;WIN64;WINSOCK2;_WINSOCK_DEPRECATED_NO_WARNINGS;_MSC_PLATFORM_TOOLSET_$(PlatformToolset);MICROSTACK_TLS_DETECT;MICROSTACK_NO_STDAFX;MICROSTACK_NOTLS;MeshLibInterface;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\openssl\include;..\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Async</ExceptionHandling>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <ControlFlowGuard>Guard</ControlFlowGuard>
+      <SDLCheck>true</SDLCheck>
+      <AdditionalOptions>/Qspectre %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>SetupAPI.lib;DbgHelp.lib;Gdiplus.lib;Iphlpapi.lib;Bcrypt.lib;Crypt32.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
-      <AdditionalOptions> /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/HIGHENTROPYVA /ignore:4099 %(AdditionalOptions)</AdditionalOptions>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>true</DataExecutionPrevention>
+      <SetChecksum>true</SetChecksum>
     </Link>
     <PreBuildEvent>
       <Command>

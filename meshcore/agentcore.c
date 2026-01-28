@@ -46,6 +46,9 @@ limitations under the License.
 #ifdef _POSIX
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <unistd.h>
 #endif
 
 #ifdef _OPENBSD
@@ -373,6 +376,148 @@ void MeshServer_SendJSON(MeshAgentHostContainer* agent, ILibWebClient_StateObjec
 
 #if defined(_LINKVM) && defined(_POSIX) && !defined(__APPLE__)
 extern void ILibProcessPipe_FreePipe(ILibProcessPipe_Pipe pipeObject);
+#endif
+
+// Security helper: Escape a string for safe use in JavaScript string literals
+// Escapes quotes, backslashes, and control characters to prevent injection
+// Returns pointer to output buffer, or NULL if input is NULL
+static char* js_escape_string(const char* input, char* output, size_t output_size)
+{
+	size_t j = 0;
+
+	if (input == NULL || output == NULL || output_size == 0) return NULL;
+
+	for (size_t i = 0; input[i] != '\0' && j < output_size - 1; i++)
+	{
+		char c = input[i];
+		// Check if we need to escape and have room for escape sequence
+		if ((c == '\'' || c == '"' || c == '\\' || c == '\n' || c == '\r' || c == '\t') && j < output_size - 2)
+		{
+			output[j++] = '\\';
+			switch (c)
+			{
+				case '\n': output[j++] = 'n'; break;
+				case '\r': output[j++] = 'r'; break;
+				case '\t': output[j++] = 't'; break;
+				default: output[j++] = c; break;
+			}
+		}
+		else if (c >= 32 && c < 127) // Only allow printable ASCII
+		{
+			output[j++] = c;
+		}
+		// Skip other control characters for safety
+	}
+	output[j] = '\0';
+	return output;
+}
+
+#ifdef _POSIX
+// Security helper: Validate service name contains only safe characters
+// Returns 1 if valid, 0 if invalid
+static int is_valid_service_name(const char *name)
+{
+	if (name == NULL || name[0] == '\0') return 0;
+
+	// Only allow alphanumeric, dash, underscore, and dot
+	for (const char *p = name; *p != '\0'; p++)
+	{
+		char c = *p;
+		if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		      (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.'))
+		{
+			return 0;
+		}
+	}
+	return 1;
+}
+
+// Security helper: Copy file safely without using system()
+// Returns 0 on success, -1 on failure
+static int safe_copy_file(const char *src, const char *dst)
+{
+	int src_fd = -1, dst_fd = -1;
+	char buffer[8192];
+	ssize_t bytes_read, bytes_written;
+	struct stat src_stat;
+	int result = -1;
+
+	if (src == NULL || dst == NULL) return -1;
+
+	// Get source file permissions
+	if (stat(src, &src_stat) != 0) return -1;
+
+	// Open source file
+	src_fd = open(src, O_RDONLY);
+	if (src_fd < 0) return -1;
+
+	// Open destination file with same permissions as source
+	dst_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, src_stat.st_mode);
+	if (dst_fd < 0)
+	{
+		close(src_fd);
+		return -1;
+	}
+
+	// Copy data
+	while ((bytes_read = read(src_fd, buffer, sizeof(buffer))) > 0)
+	{
+		char *write_ptr = buffer;
+		ssize_t remaining = bytes_read;
+
+		while (remaining > 0)
+		{
+			bytes_written = write(dst_fd, write_ptr, remaining);
+			if (bytes_written < 0)
+			{
+				if (errno == EINTR) continue;
+				goto cleanup;
+			}
+			remaining -= bytes_written;
+			write_ptr += bytes_written;
+		}
+	}
+
+	if (bytes_read == 0) result = 0; // Success - reached EOF
+
+cleanup:
+	if (src_fd >= 0) close(src_fd);
+	if (dst_fd >= 0)
+	{
+		if (fsync(dst_fd) != 0 && result == 0) result = -1;
+		close(dst_fd);
+	}
+	return result;
+}
+
+// Security helper: Execute service command safely using fork/execve
+// Returns exit status of command, or -1 on error
+static int safe_exec_service_cmd(const char *cmd_path, char *const argv[])
+{
+	pid_t pid;
+	int status;
+
+	if (cmd_path == NULL || argv == NULL) return -1;
+
+	pid = fork();
+	if (pid < 0)
+	{
+		return -1; // Fork failed
+	}
+	else if (pid == 0)
+	{
+		// Child process
+		execve(cmd_path, argv, environ);
+		_exit(127); // execve failed
+	}
+	else
+	{
+		// Parent process
+		if (waitpid(pid, &status, 0) < 0) return -1;
+		if (WIFEXITED(status)) return WEXITSTATUS(status);
+		return -1;
+	}
+}
 #endif
 
 void MeshAgent_sendConsoleText(duk_context *ctx, char *format, ...)
@@ -957,9 +1102,14 @@ void ILibDuktape_MeshAgent_RemoteDesktop_EndSink(ILibDuktape_DuplexStream *strea
 			char *user = Duktape_GetStringPropertyValue(ptrs->ctx, -1, REMOTE_DESKTOP_VIRTUAL_SESSION_USERNAME, NULL);
 			if (user != NULL)
 			{
-				Duktape_Console_LogEx(ptrs->ctx, ILibDuktape_LogType_Info1, "Need to kill virtual user session: %s", user);
-				duk_push_sprintf(ptrs->ctx, "var _tmp=require('child_process').execFile('/bin/sh', ['sh']);_tmp.stdout.on('data', function (){});_tmp.stdin.write('loginctl kill-user %s\\nexit\\n');_tmp.waitExit();", user);
-				duk_peval_noresult(ptrs->ctx);
+				// Escape username to prevent JavaScript/shell injection
+				char escapedUser[256];
+				if (js_escape_string(user, escapedUser, sizeof(escapedUser)) != NULL)
+				{
+					Duktape_Console_LogEx(ptrs->ctx, ILibDuktape_LogType_Info1, "Need to kill virtual user session: %s", escapedUser);
+					duk_push_sprintf(ptrs->ctx, "var _tmp=require('child_process').execFile('/bin/sh', ['sh']);_tmp.stdout.on('data', function (){});_tmp.stdin.write('loginctl kill-user %s\\nexit\\n');_tmp.waitExit();", escapedUser);
+					duk_peval_noresult(ptrs->ctx);
+				}
 			}
 		}
 		if (duk_has_prop_string(ptrs->ctx, -1, KVM_IPC_SOCKET))
@@ -3580,8 +3730,13 @@ void MeshServer_OnResponse(ILibWebClient_StateObject WebStateObject, int Interru
 				}
 				else
 				{
-					char idleBuffer[16];
-					idleBuffer[ILibSimpleDataStore_Get(agent->masterDb, "controlChannelIdleTimeout", idleBuffer, sizeof(idleBuffer)-1)] = 0;
+					char idleBuffer[16] = {0};  // Zero-initialize buffer
+					int idleLen = ILibSimpleDataStore_Get(agent->masterDb, "controlChannelIdleTimeout", idleBuffer, sizeof(idleBuffer)-1);
+					if (idleLen >= 0 && idleLen < (int)sizeof(idleBuffer)) {
+						idleBuffer[idleLen] = 0;
+					} else {
+						idleBuffer[0] = 0;  // Invalid length, treat as empty
+					}
 					if (ILib_atoi_int32(&(agent->controlChannel_idleTimeout_seconds), idleBuffer, sizeof(idleBuffer)) != 0)
 					{
 						agent->controlChannel_idleTimeout_seconds = DEFAULT_IDLE_TIMEOUT;
@@ -3814,7 +3969,10 @@ duk_ret_t MeshServer_ConnectEx_AutoProxy(duk_context *ctx)
 		int len = sprintf_s(autoproxy_setup, sizeof(autoproxy_setup), "http://%s", result);
 		if (len > 0)
 		{
-			duk_push_sprintf(ctx, "process.stdout.write(' [%s]\\n');", result);
+			// Escape result to prevent JavaScript injection
+			char escapedResult[256];
+			js_escape_string(result, escapedResult, sizeof(escapedResult));
+			duk_push_sprintf(ctx, "process.stdout.write(' [%s]\\n');", escapedResult);
 			duk_peval_noresult(ctx);
 			ILibSimpleDataStore_Cached(agent->masterDb, "WebProxy", 8, autoproxy_setup, len + 1);
 		}
@@ -3862,7 +4020,10 @@ void MeshServer_ConnectEx(MeshAgentHostContainer *agent)
 	{
 		if (agent->autoproxy_status == 0)
 		{
-			duk_push_sprintf(agent->meshCoreCtx, "require('proxy-helper').autoHelper(require('http').parseUri('%s').host);", ILibScratchPad2);
+			// Escape URL to prevent JavaScript injection
+			char escapedUrl[sizeof(ILibScratchPad2)];
+			js_escape_string(ILibScratchPad2, escapedUrl, sizeof(escapedUrl));
+			duk_push_sprintf(agent->meshCoreCtx, "require('proxy-helper').autoHelper(require('http').parseUri('%s').host);", escapedUrl);
 			if (duk_peval(agent->meshCoreCtx) == 0)														// [promise]
 			{
 				duk_eval_string_noresult(agent->meshCoreCtx, "process.stdout.write('Checking Autoproxy...');");
@@ -4131,11 +4292,9 @@ void MeshServer_ConnectEx(MeshAgentHostContainer *agent)
 	}
 
 	// Set User-Agent for proxies to identify agents and versions
-	const char* FieldData = "MeshAgent ";
-	char combined[40];
-	strcpy(combined, FieldData);
-	strcat(combined, SOURCE_COMMIT_DATE);
-	ILibAddHeaderLine(req, "User-Agent", 10, combined, (int)strnlen_s(combined, 50));
+	char combined[64];
+	snprintf(combined, sizeof(combined), "MeshAgent %s", SOURCE_COMMIT_DATE);
+	ILibAddHeaderLine(req, "User-Agent", 10, combined, (int)strnlen_s(combined, sizeof(combined)));
 
 	free(path);
 
@@ -4283,7 +4442,10 @@ void MeshServer_Connect(MeshAgentHostContainer *agent)
 			char *url = Duktape_GetStringPropertyValue(agent->meshCoreCtx, -1, "url", NULL);
 			if (url != NULL)
 			{
-				duk_push_sprintf(agent->meshCoreCtx, "require('win-authenticode-opus').locked('%s');", url);						// [obj][str]
+				// Escape URL to prevent JavaScript injection
+				char escapedUrl[1024];
+				js_escape_string(url, escapedUrl, sizeof(escapedUrl));
+				duk_push_sprintf(agent->meshCoreCtx, "require('win-authenticode-opus').locked('%s');", escapedUrl);						// [obj][str]
 				if (duk_peval(agent->meshCoreCtx) == 0 && !duk_is_null_or_undefined(agent->meshCoreCtx, -1))						// [obj][obj]
 				{
 					char *dns = Duktape_GetStringPropertyValue(agent->meshCoreCtx, -1, "dns", NULL);
@@ -5065,7 +5227,10 @@ int MeshAgent_AgentMode(MeshAgentHostContainer *agentHost, int paramLen, char **
 		agentHost->displayName = "MeshCentral";
 	}
 
-	duk_push_sprintf(tmpCtx, "require('service-manager').manager.getService('%s').isMe();", agentHost->meshServiceName);
+	// Escape service name to prevent JavaScript injection
+	char escapedServiceName[256];
+	js_escape_string(agentHost->meshServiceName, escapedServiceName, sizeof(escapedServiceName));
+	duk_push_sprintf(tmpCtx, "require('service-manager').manager.getService('%s').isMe();", escapedServiceName);
 	tmpString = (char*)duk_get_string(tmpCtx, -1);
 
 	if (duk_peval_string(tmpCtx, "(function foo() { var f = require('service-manager').manager.getServiceType(); switch(f){case 'procd': return(7); case 'windows': return(10); case 'launchd': return(3); case 'freebsd': return(5); case 'systemd': return(1); case 'init': return(2); case 'upstart': return(4); default: return(0);}})()") == 0)
@@ -5104,7 +5269,9 @@ int MeshAgent_AgentMode(MeshAgentHostContainer *agentHost, int paramLen, char **
 #endif
 	}
 #if defined(_WINSERVICE)
-	duk_push_sprintf(tmpCtx, "require('_agentNodeId').checkResetNodeId('%s');", agentHost->meshServiceName);
+	// Reuse escapedServiceName from earlier, escape again for safety
+	js_escape_string(agentHost->meshServiceName, escapedServiceName, sizeof(escapedServiceName));
+	duk_push_sprintf(tmpCtx, "require('_agentNodeId').checkResetNodeId('%s');", escapedServiceName);
 	if (duk_peval(tmpCtx) == 0)
 	{
 		if (duk_is_boolean(tmpCtx, -1) && duk_get_boolean(tmpCtx, -1) != 0)
@@ -5805,7 +5972,10 @@ duk_ret_t MeshAgent_ScriptMode_ZipSink(duk_context *ctx)
 duk_ret_t MeshAgent_ScriptMode_ZipSinkErr(duk_context *ctx)
 {
 	char *tmp = (char*)duk_require_string(ctx, 0);
-	char *val = (char*)duk_push_sprintf(ctx, "console.log('%s');process._exit();", tmp);
+	// Escape error message to prevent JavaScript injection
+	char escapedMsg[1024];
+	js_escape_string(tmp, escapedMsg, sizeof(escapedMsg));
+	char *val = (char*)duk_push_sprintf(ctx, "console.log('%s');process._exit();", escapedMsg);
 	duk_peval_string(ctx, val);
 	return(0);
 }
@@ -5975,8 +6145,10 @@ void MeshAgent_ScriptMode(MeshAgentHostContainer *agentHost, int argc, char **ar
 		}
 		else
 		{
-			// Trying to run a zip file
-			duk_push_sprintf(agentHost->meshCoreCtx, "require('zip-reader').read('%s');", jsPath);	// [string]
+			// Trying to run a zip file - escape path to prevent JavaScript injection
+			char escapedJsPath[1024];
+			js_escape_string(jsPath, escapedJsPath, sizeof(escapedJsPath));
+			duk_push_sprintf(agentHost->meshCoreCtx, "require('zip-reader').read('%s');", escapedJsPath);	// [string]
 #ifdef WIN32					
 			duk_string_split(agentHost->meshCoreCtx, -1, "\\");										// [string][array]
 			duk_array_join(agentHost->meshCoreCtx, -1, "\\\\");										// [string][array][string]
@@ -6242,19 +6414,37 @@ int MeshAgent_Start(MeshAgentHostContainer *agentHost, int paramLen, char **para
 				stat(agentHost->exePath, &results); // This the mode of the current executable
 				chmod(updateFilePath, results.st_mode); // Set the new executable to the same mode as the current one.
 
-				sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "mv \"%s\" \"%s\"", updateFilePath, agentHost->exePath); // Move the update over our own executable
-				if (system(ILibScratchPad)) {}
+				// Use rename() instead of system("mv") to avoid command injection
+				if (rename(updateFilePath, agentHost->exePath) != 0)
+				{
+					// If rename fails (e.g., cross-device), fall back to safe copy
+					if (safe_copy_file(updateFilePath, agentHost->exePath) == 0)
+					{
+						remove(updateFilePath);
+					}
+				}
 				switch (agentHost->platformType)
 				{
 				case MeshAgent_Posix_PlatformTypes_BSD:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... [restarting service]"); }
-					sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "service %s onerestart", agentHost->meshServiceName);	// Restart the service
-					ignore_result(system(ILibScratchPad));
+					// Use fork/execve instead of system() to avoid command injection
+					if (is_valid_service_name(agentHost->meshServiceName))
+					{
+						char *args[] = { "service", agentHost->meshServiceName, "onerestart", NULL };
+						ignore_result(safe_exec_service_cmd("/usr/sbin/service", args));
+					}
 					break;
 				case MeshAgent_Posix_PlatformTypes_LAUNCHD:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... [kickstarting service]"); }
-					sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "launchctl kickstart -k system/%s", agentHost->meshServiceName);	// Restart the service
-					ignore_result(system(ILibScratchPad));
+					// Use fork/execve instead of system() to avoid command injection
+					if (is_valid_service_name(agentHost->meshServiceName))
+					{
+						// Build the service identifier (system/servicename)
+						char serviceId[256];
+						snprintf(serviceId, sizeof(serviceId), "system/%s", agentHost->meshServiceName);
+						char *args[] = { "launchctl", "kickstart", "-k", serviceId, NULL };
+						ignore_result(safe_exec_service_cmd("/bin/launchctl", args));
+					}
 					break;
 				case MeshAgent_Posix_PlatformTypes_SYSTEMD:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... [SYSTEMD should auto-restart]"); }
@@ -6266,13 +6456,21 @@ int MeshAgent_Start(MeshAgentHostContainer *agentHost, int paramLen, char **para
 					break;
 				case MeshAgent_Posix_PlatformTypes_INITD:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... Calling Service restart (INITD)"); }
-					sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "service %s restart", agentHost->meshServiceName);	// Restart the service
-					ignore_result(MeshAgent_System(ILibScratchPad));
+					// Use fork/execve instead of system() to avoid command injection
+					if (is_valid_service_name(agentHost->meshServiceName))
+					{
+						char *args[] = { "service", agentHost->meshServiceName, "restart", NULL };
+						ignore_result(safe_exec_service_cmd("/usr/sbin/service", args));
+					}
 					break;
 				case MeshAgent_Posix_PlatformTypes_INIT_UPSTART:
 					if (agentHost->logUpdate != 0) { ILIBLOGMESSSAGE("SelfUpdate -> Complete... Calling initctl restart (UPSTART)"); }
-					sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "initctl restart %s", agentHost->meshServiceName);	// Restart the service
-					ignore_result(MeshAgent_System(ILibScratchPad));
+					// Use fork/execve instead of system() to avoid command injection
+					if (is_valid_service_name(agentHost->meshServiceName))
+					{
+						char *args[] = { "initctl", "restart", agentHost->meshServiceName, NULL };
+						ignore_result(safe_exec_service_cmd("/sbin/initctl", args));
+					}
 					break;
 				default:
 					break;
@@ -6293,8 +6491,12 @@ int MeshAgent_Start(MeshAgentHostContainer *agentHost, int paramLen, char **para
 				chmod(updateFilePath, results.st_mode); // Set the new executable to the same mode as the current one.
 
 				remove(agentHost->exePath);
-				sprintf_s(ILibScratchPad, sizeof(ILibScratchPad), "cp \"%s\" \"%s\"", updateFilePath, agentHost->exePath);
-				if (system(ILibScratchPad)) {}
+				// Use safe_copy_file() instead of system("cp") to avoid command injection
+				if (safe_copy_file(updateFilePath, agentHost->exePath) != 0)
+				{
+					// Copy failed, cannot continue with update
+					_exit(1);
+				}
 				ignore_result(write(STDOUT_FILENO, "SelfUpdate -> Restarting Agent...\n", 34));
 
 				execv(agentHost->exePath, agentHost->execparams);
@@ -6377,28 +6579,49 @@ void MeshAgent_PerformSelfUpdate(char* selfpath, char* exepath, int argc, char *
 // Perform self-update (Linux version)
 void MeshAgent_PerformSelfUpdate(char* selfpath, char* exepath, int argc, char **argv)
 {
-	int i, ptr = 0;
+	pid_t pid;
+	struct stat src_stat;
 
 	// First, we wait a little to give time for the calling process to exit
 	sleep(5);
 
-	// Attempt to copy our own exe over 
+	// Attempt to copy our own exe over using safe_copy_file() instead of system("cp")
 	remove(exepath);
-	sprintf_s(ILibScratchPad2, 6000, "cp \"%s\" \"%s\"", selfpath, exepath);
-	while (system(ILibScratchPad2) != 0)
+	while (safe_copy_file(selfpath, exepath) != 0)
 	{
 		sleep(5);
 		remove(exepath);
 	}
 
-	// Built the argument list
-	ILibScratchPad[0] = 0;
-	for (i = 2; i < argc && ptr >= 0; i++) ptr += sprintf_s(ILibScratchPad + ptr, 4096 - ptr, " %s", argv[i]);
-	sprintf_s(ILibScratchPad2, 60000, "%s%s &", exepath, ILibScratchPad);
+	// Get permissions from source and apply to destination
+	if (stat(selfpath, &src_stat) == 0)
+	{
+		chmod(exepath, src_stat.st_mode);
+	}
 
-	// Now run the updated process
-	i = system(ILibScratchPad2);
-	UNREFERENCED_PARAMETER(i);
+	// Build the argument list for execv
+	// argv[0] = selfpath (update binary), argv[1] = exepath (original path)
+	// We want to run: exepath argv[2] argv[3] ...
+	char **new_argv = (char **)malloc((argc + 1) * sizeof(char *));
+	if (new_argv == NULL) return;
+
+	new_argv[0] = exepath;
+	for (int i = 2; i < argc; i++)
+	{
+		new_argv[i - 1] = argv[i];
+	}
+	new_argv[argc > 1 ? argc - 1 : 1] = NULL;
+
+	// Fork and exec the updated process instead of using system() with "&"
+	pid = fork();
+	if (pid == 0)
+	{
+		// Child process - run the updated executable
+		execv(exepath, new_argv);
+		_exit(127); // execv failed
+	}
+	// Parent exits, leaving child running (detached)
+	free(new_argv);
 }
 #endif
 
