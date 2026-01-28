@@ -85,7 +85,7 @@ int info_GetLocalInterfaces(char* data, int maxdata)
 	pAdapterInfo = (IP_ADAPTER_INFO *)malloc(sizeof(IP_ADAPTER_INFO));
 	if (pAdapterInfo == NULL) return 0;
 	ulOutBufLen = sizeof(IP_ADAPTER_INFO);
-	if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) != ERROR_SUCCESS) { free(pAdapterInfo); if (ulOutBufLen == 0) return 0; pAdapterInfo = (IP_ADAPTER_INFO *)malloc(ulOutBufLen); }
+	if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) != ERROR_SUCCESS) { free(pAdapterInfo); if (ulOutBufLen == 0) return 0; pAdapterInfo = (IP_ADAPTER_INFO *)malloc(ulOutBufLen); if (pAdapterInfo == NULL) return 0; }
 
 	// Get the list of all local interfaces
 	if ((dwRetVal = GetAdaptersInfo(pAdapterInfo, &ulOutBufLen)) != ERROR_SUCCESS || ulOutBufLen == 0) { free(pAdapterInfo); return 0; }
@@ -107,6 +107,7 @@ int info_GetLocalInterfaces(char* data, int maxdata)
 			return 0;
 		}
 		pAdapterAddresses = (IP_ADAPTER_ADDRESSES *)malloc(ulOutBufLen);
+		if (pAdapterAddresses == NULL) { free(pAdapterInfo); return 0; }
 	}
 
 	// Get the list of all local interfaces

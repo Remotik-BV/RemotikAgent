@@ -194,6 +194,7 @@ int signcheck_verifysign(char* filename, int upgrade)
 	if ((buf = (char*)malloc(4096)) == NULL) goto error;
 	while ((i > 0) && (len = fread(buf, 1, i > 4096 ? 4096 : i, pFile)) > 0) { SHA384_Update(&c, buf, len); i -= len; }
 	free(buf);
+	buf = NULL;  // Prevent double-free in error cleanup
 	if (i != 0) goto error;
 	SHA384_Final((unsigned char*)totalfilehash, &c);
 
@@ -214,6 +215,7 @@ error:
 	util_freecert(&cert);
 	if (certbuf != NULL) free(certbuf);
 	if (hashs != NULL) free(hashs);
+	if (buf != NULL) free(buf);
 	if (pFile != NULL) fclose(pFile);
 	if (signatureblock != NULL) free(signatureblock);
 	if (found != 1 || ver == 0 || agentid == 0) return 0;

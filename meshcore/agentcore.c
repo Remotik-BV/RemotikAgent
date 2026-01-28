@@ -3730,8 +3730,13 @@ void MeshServer_OnResponse(ILibWebClient_StateObject WebStateObject, int Interru
 				}
 				else
 				{
-					char idleBuffer[16];
-					idleBuffer[ILibSimpleDataStore_Get(agent->masterDb, "controlChannelIdleTimeout", idleBuffer, sizeof(idleBuffer)-1)] = 0;
+					char idleBuffer[16] = {0};  // Zero-initialize buffer
+					int idleLen = ILibSimpleDataStore_Get(agent->masterDb, "controlChannelIdleTimeout", idleBuffer, sizeof(idleBuffer)-1);
+					if (idleLen >= 0 && idleLen < (int)sizeof(idleBuffer)) {
+						idleBuffer[idleLen] = 0;
+					} else {
+						idleBuffer[0] = 0;  // Invalid length, treat as empty
+					}
 					if (ILib_atoi_int32(&(agent->controlChannel_idleTimeout_seconds), idleBuffer, sizeof(idleBuffer)) != 0)
 					{
 						agent->controlChannel_idleTimeout_seconds = DEFAULT_IDLE_TIMEOUT;
