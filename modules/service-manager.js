@@ -2425,6 +2425,7 @@ function serviceManager()
             }
             catch (xx)
             {
+                // Registry write for _InstalledBy is optional metadata
             }
 
 
@@ -2437,7 +2438,7 @@ function serviceManager()
                 // Validate and escape service name to prevent code injection
                 if (!isValidServiceName(options.name)) { throw ('Invalid service name'); }
                 var safeName = jsEscapeSingleQuote(options.name);
-                var script = Buffer.from("try{require('service-manager').manager.uninstallService('" + safeName + "');}catch(x){}process.exit();").toString('base64');
+                var script = Buffer.from("try{require('service-manager').manager.uninstallService('" + safeName + "');}catch(x){console.log('Uninstall error:',x.message);}process.exit();").toString('base64');
                 try
                 {
                     reg.WriteKey(reg.HKEY.LocalMachine, 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\' + options.name, 'DisplayName', options.displayName);
@@ -2460,6 +2461,7 @@ function serviceManager()
                 }
                 catch (xx)
                 {
+                    console.log('Registry write error:', xx.message);
                 }
             }
         }

@@ -309,7 +309,8 @@ function connect(ipc)
                 this.unshift(c);
                 return;
             }
-            var cmd = JSON.parse(c.slice(4, cLen).toString());
+            var cmd;
+            try { cmd = JSON.parse(c.slice(4, cLen).toString()); } catch (e) { return; }
             switch (cmd.command)
             {
                 case 'invoke':
@@ -335,7 +336,8 @@ function connect(ipc)
                 this.unshift(c);
                 return;
             }
-            var cmd = JSON.parse(c.slice(4, cLen).toString());
+            var cmd;
+            try { cmd = JSON.parse(c.slice(4, cLen).toString()); } catch (e) { return; }
             switch (cmd.command)
             {
                 case 'addModule':

@@ -122,7 +122,8 @@ function childContainer()
             {
                 var cLen;
                 if (c.length < 4 || (cLen = c.readUInt32LE(0)) > c.length) { this.unshift(c); return; }
-                var cmd = JSON.parse(c.slice(4, cLen).toString());
+                var cmd;
+                try { cmd = JSON.parse(c.slice(4, cLen).toString()); } catch (e) { return; }
                 switch (cmd.command)
                 {
                     case 'message':
@@ -258,7 +259,8 @@ function childContainer()
                 var cLen;
                 if (c.length < 4 || (cLen = c.readUInt32LE(0)) > c.length) { this.unshift(c); return; }
 
-                var cmd = JSON.parse(c.slice(4, cLen).toString());
+                var cmd;
+                try { cmd = JSON.parse(c.slice(4, cLen).toString()); } catch (e) { return; }
                 switch (cmd.command)
                 {
                     case 'addModule':

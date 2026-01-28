@@ -65,7 +65,8 @@ function heciRedirector()
                         {
                             if (typeof chunk == 'string')
                             {
-                                var cmd = JSON.parse(chunk);
+                                var cmd;
+                                try { cmd = JSON.parse(chunk); } catch (e) { return; }
                                 switch(cmd.Command)
                                 {
                                     case 'Event':
@@ -136,7 +137,8 @@ function heciRedirector()
             {
                 if(typeof chunk == 'string')
                 {
-                    var cmd = JSON.parse(chunk);
+                    var cmd;
+                    try { cmd = JSON.parse(chunk); } catch (e) { return; }
                     switch(cmd.Command)
                     {
                         default:
