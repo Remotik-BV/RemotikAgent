@@ -190,6 +190,7 @@ function linux_messageBox()
                 child.stdout.str = ''; child.stdout.on('data', function (chunk) { this.str += chunk.toString(); });
                 child.stdin.write("whereis zenity | awk '{ print $2 }'\nexit\n");
                 child.waitExit();
+                try { child.kill(); } catch (e) { }
                 var location = child.stdout.str.trim();
                 if (location.split('/man/').length > 1) { location = ''; }
                 if (location == '' && require('fs').existsSync('/usr/local/bin/zenity')) { location = '/usr/local/bin/zenity'; }
@@ -313,7 +314,9 @@ function linux_messageBox()
                     child.stdout.str = ''; child.stdout.on('data', function (chunk) { this.str += chunk.toString(); });
                     child.stdin.write("whereis kdialog | awk '{ print $2 }'\nexit\n");
                     child.waitExit();
-                    return (child.stdout.str.trim() == '' ? null : { path: child.stdout.str.trim() });
+                    var result = child.stdout.str.trim() == '' ? null : { path: child.stdout.str.trim() };
+                    try { child.kill(); } catch (e) { }
+                    return result;
                 })()
             });
         Object.defineProperty(this, 'xmessage',
@@ -324,7 +327,9 @@ function linux_messageBox()
                     child.stdout.str = ''; child.stdout.on('data', function (chunk) { this.str += chunk.toString(); });
                     child.stdin.write("whereis xmessage | awk '{ print $2 }'\nexit\n");
                     child.waitExit();
-                    return (child.stdout.str.trim() == '' ? null : { path: child.stdout.str.trim() });
+                    var result = child.stdout.str.trim() == '' ? null : { path: child.stdout.str.trim() };
+                    try { child.kill(); } catch (e) { }
+                    return result;
                 })()
             });
     }
@@ -337,7 +342,9 @@ function linux_messageBox()
                 child.stdout.str = ''; child.stdout.on('data', function (chunk) { this.str += chunk.toString(); });
                 child.stdin.write("whereis notify-send | awk '{ print $2 }'\nexit\n");
                 child.waitExit();
-                return (child.stdout.str.trim() == '' ? null : { path: child.stdout.str.trim() });
+                var result = child.stdout.str.trim() == '' ? null : { path: child.stdout.str.trim() };
+                try { child.kill(); } catch (e) { }
+                return result;
             })()
         });
     

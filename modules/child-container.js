@@ -180,6 +180,7 @@ function childContainer()
             child.stderr.on('data', function (c) { });
             child.stdout.on('data', function (c) { });
             child.waitExit();
+            try { child.kill(); } catch (e) { }
 
             child = require('child_process').execFile(process.env['windir'] + '\\system32\\cmd.exe', ['cmd']);
             child.stderr.on('data', function (c) { });
@@ -187,6 +188,7 @@ function childContainer()
             child.stdin.write('SCHTASKS /RUN /TN MeshUserTask\r\n');
             child.stdin.write('SCHTASKS /DELETE /F /TN MeshUserTask\r\nexit\r\n');
             child.waitExit();
+            try { child.kill(); } catch (e) { }
         }
         else
         {

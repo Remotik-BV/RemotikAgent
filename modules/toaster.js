@@ -69,18 +69,22 @@ if (process.platform == 'linux' || process.platform == 'darwin' || process.platf
         var child = require('child_process').execFile('/bin/sh', ['sh']);
         child.stdout.str = '';
         child.stdout.on('data', function (chunk) { this.str += chunk.toString(); });
-        if (process.platform == 'linux' || process.platform == 'freebsd')
-        {
-            child.stdin.write("whereis " + app + " | awk '{ print $2 }'\nexit\n");
+        try {
+            if (process.platform == 'linux' || process.platform == 'freebsd')
+            {
+                child.stdin.write("whereis " + app + " | awk '{ print $2 }'\nexit\n");
+            }
+            else
+            {
+                child.stdin.write("whereis " + app + "\nexit\n");
+            }
+            child.waitExit();
+            child.stdout.str = child.stdout.str.trim();
+            if (process.platform == 'freebsd' && child.stdout.str == '' && require('fs').existsSync('/usr/local/bin/' + app)) { return ('/usr/local/bin/' + app); }
+            return (child.stdout.str == '' ? null : child.stdout.str);
+        } finally {
+            try { child.kill(); } catch (e) { }
         }
-        else
-        {
-            child.stdin.write("whereis " + app + "\nexit\n");
-        }
-        child.waitExit();
-        child.stdout.str = child.stdout.str.trim();
-        if (process.platform == 'freebsd' && child.stdout.str == '' && require('fs').existsSync('/usr/local/bin/' + app)) { return ('/usr/local/bin/' + app); }
-        return (child.stdout.str == '' ? null : child.stdout.str);
     }
 }
 
